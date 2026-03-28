@@ -58,8 +58,8 @@ def get_user(m_user):
         # новые игроки
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (user_id, name, 100.0, None, 0, 0, now, 0.0, None, 0))
+        cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               (user_id, name, 100.0, None, 0, 0, now, 0.0, None, 0, 0, 0))
 
         conn.commit()
         cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -156,7 +156,7 @@ def business_handler(message):
     args = message.text.split()
     user = get_user(message.from_user)
 
-    #блять я чут чут задаюсь вопросом нахуй мне ещё один список но да похуй
+    #бля
     businesses = {
         1: {"name": "Ларек", "price": 5000, "earn": 2},
         2: {"name": "Продуктовый магазин", "price": 10000, "earn": 4},
@@ -193,31 +193,36 @@ def business_handler(message):
             bot.reply_to(message, "че нахуй, введи норм.")
 
 
-#покупка
 @bot.message_handler(commands=['buy'])
-def buy_biz(message):
-    try:
-        biz_id = int(message.text.split()[1])
-        if biz_id not in BUSINESSES: raise ValueError
-    except:
-        bot.reply_to(message, "Выбери номер бизнеса из списка /biz list шо б купить")
+def buy_handler(message):
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        bot.reply_to(message, "Напиши /buy <номер бизнеса> из списка /biz list")
         return
 
+    biz_id = int(args[1])
     user = get_user(message.from_user)
-    if user[4] > 0:  # ес бизнес есть то пишет 1, ес нету то пишет 0
-        bot.reply_to(message, "У тя есть бизнес, прокачай до 5 уровня шоб продать и купить другой")
+
+    if biz_id not in businesses:
+        bot.reply_to(message, "нету такого номера бизнеса")
         return
 
-    name, price, income = BUSINESSES[biz_id]
-    if user[2] < price:
-        bot.reply_to(message, f"Тебе не хватает ${price - int(user[2])}")
+    biz = businesses[biz_id]
+
+    # Проверка бабла (user[2] — это баланс)
+    if user[2] < biz['price']:
+        bot.reply_to(message, f"бомж момент")
         return
 
-    new_balance = user[2] - price
-    print(f"DEBUG: user type: {type(user)}, content: {user}")
-    update_db(user[0], balance=new_balance, biz_id=biz_id, biz_lvl=0)
-    bot.reply_to(message, f"Поздравляю! Ты купил {name}. Теперь ты ~~хуесос!~~ бизнесмен!")
+    if user[4] != 0: # user[4] — это поле biz_id в базе
+        bot.reply_to(message, "у тебя уже есть бизнес")
+        return
 
+    #остоток
+    new_balance = user[2] - biz['price']
+    update_db(user[0], balance=new_balance, biz_id=biz_id, biz_lvl=1)
+
+    bot.reply_to(message, f"Ты купил{biz['name']} Теперь сосешь из него по {biz['earn']}$/час.")
 
 #апгрейд
 @bot.message_handler(commands=['upgrade'])
@@ -237,13 +242,13 @@ def upgrade_biz(message):
         bot.reply_to(message, "Твой бизнес на максимальном уровне")
         return
 
-    base_name, base_price, base_income = BUSINESSES[biz_id]
+    base_name, base_price, base_income = businesses[biz_id]
 
     #формула: цена / 5 * (lvl + 1)
     upgrade_cost = (base_price / 5) * (lvl + 1)
 
     if user[2] < upgrade_cost:
-        bot.reply_to(message, f"Улучшение стоит ${upgrade_cost:.2f}. Тебе не хватает ${upgrade_cost - user[2]:.2f}")
+        bot.reply_to(message, f"Улучшение стоит ${int(upgrade_cost)}. Тебе не хватает ${int(upgrade_cost) - int(user[2])}")
         return
 
     new_lvl = lvl + 1
@@ -253,7 +258,7 @@ def upgrade_biz(message):
     #доход увеличивается ура
     new_income = base_income + (base_income * new_lvl)
     bot.reply_to(message,
-                 f"Уровень поднят до {new_lvl}!\nНовый доход: ${new_income}/час\nСписано: ${upgrade_cost:.2f}")
+                 f"Уровень поднят до {new_lvl}!\nНовый доход: ${new_income}/час\nСписано: ${int(upgrade_cost)}")
 
 
 #продажа бизнеса
@@ -284,7 +289,7 @@ def collect_profit(user_id):
     hours_passed = (datetime.now() - last_time).total_seconds() // 3600
 
     if hours_passed >= 1:
-        base_income = BUSINESSES[biz_id]
+        base_income = businesses[biz_id]
         current_hourly_income = base_income + (base_income * lvl)
         total_profit = hours_passed * current_hourly_income
 
@@ -313,7 +318,7 @@ def get_credit(message):
     new_balance = user[2] + amount
 
     update_db(user[0], balance=new_balance, credit_sum=valid_sums[amount], credit_time=int(time.time()))
-    bot.reply_to(message, f"Ты взял в кредит {amount}$,а должен вернуть {valid_sums[amount]}$ через 24 часа")
+    bot.reply_to(message, f"Ты взял в кредит{amount}$,а должен вернуть {valid_sums[amount]}$ через 24 часа")
 
 
 @bot.message_handler(commands=['helpa'])
